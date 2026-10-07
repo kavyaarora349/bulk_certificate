@@ -218,48 +218,5 @@ PDFs live under `{CERTIFICATES_DIR}/{job_id}/{item_id}.pdf`. Paths use **only UU
 
 On startup, any job left in `PROCESSING` is marked `FAILED` (not re-queued). BackgroundTasks are in-process and do not survive a crash; re-queueing without idempotency could double-write. Documented trade-off — production would use a durable queue + idempotent generation.
 
-### Security notes
 
-- Path safety via UUID-only segments
-- `MAX_RECIPIENTS` size limit (413)
-- No auth in this take-home (add API keys / OAuth next)
-- Email / name sanitised for display only; never used in paths
 
----
-
-## Known limitations & next steps
-
-| Limitation | Next step |
-|---|---|
-| In-process BackgroundTasks | Celery or RQ + Redis |
-| Local filesystem | S3 / object storage + signed URLs |
-| `create_all` schema | Alembic migrations |
-| No auth | API keys or OAuth2 |
-| No rate limiting | Per-IP / per-key limits |
-| No retries on transient PDF errors | Per-item retry with backoff |
-| No idempotency keys | Client-supplied key to dedupe POSTs |
-| Single template | Template registry keyed by `template_id` |
-
----
-
-## Interview cheat sheet
-
-1. **How would you scale this?** Move `process_job` to Celery/RQ workers behind Redis; store PDFs in S3; run multiple API replicas + workers; put Postgres behind the API; add a CDN for downloads.
-
-2. **What if the server crashes mid-job?** On startup we mark `PROCESSING` jobs as `FAILED`. Pending items stay `PENDING`. With Celery, unfinished tasks would be redelivered; generation should be idempotent (overwrite same `{item_id}.pdf`).
-
-3. **How would you add retries?** Catch transient errors in `_process_one_item`, increment an `attempt_count`, re-queue with exponential backoff up to N tries, then mark `FAILED`.
-
-4. **How would you make processing synchronous?** Call `process_job` inline in the route before returning (or set `SYNC_PROCESSING=true`). Fine for tiny jobs; blocks the HTTP worker for large ones.
-
-5. **How would you add a second template?** Introduce `template_id` on the job; `CertificateGenerator` dispatches to `templates/<id>.py` via a registry dict. Keep path layout unchanged.
-
-6. **Why commit after each item?** So `GET /jobs/{id}` shows live progress and a crash loses at most one item’s work, not the whole batch.
-
-7. **Why a separate DB session in the worker?** The request session is closed when the response finishes; BackgroundTasks must open their own session (`SessionLocal()`).
-
-8. **How do you prevent path traversal?** File paths are built only from UUIDs (`job_id` / `item_id`); user strings never enter the path; resolved path must stay under `CERTIFICATES_DIR`.
-
-9. **How would you add auth?** API key middleware or OAuth2 bearer tokens; scope downloads to the owning account; never expose other users’ `job_id`s without checks (UUIDs help but are not auth).
-
-10. **Why SQLite by default?** Zero-setup demos and tests. `DATABASE_URL` swaps to Postgres without code changes because SQLAlchemy abstracts the dialect.
