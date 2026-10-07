@@ -1,0 +1,10 @@
+{
+  "certificate_title": "Certificate of Completion",
+  "course_name": "Backend Engineering 101",
+  "issue_date": "2026-10-07",
+  "recipients": [
+    {"name": "Alice Smith", "email": "alice@example.com"},
+    {"name": "Bob Jones", "email": "bob@example.com"},
+    {"name": "", "email": "bad-email"}
+  ]
+}
